@@ -41,6 +41,12 @@ Baixe e instale: https://github.com/UB-Mannheim/tesseract/wiki
 pip install opencv-python pytesseract numpy
 ```
 
+ou
+
+```
+python -m pip install opencv-python pytesseract numpy
+```
+
 ### 3. Configurar caminhos
 
 Edite as linhas no `main.py`:
