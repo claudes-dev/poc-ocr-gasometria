@@ -1,68 +1,80 @@
-# API Python - OCR Gasometria
+# Backend Core - API Flask + OCR
 
 API REST completa em Python/Flask para processamento OCR de resultados de gasometria arterial.
 
 ## 📋 Estrutura do Projeto
 
 ```
-python-api/
-├── app.py                          # Aplicação Flask principal
+backend-core/
+├── app.py                          # Aplicação Flask principal (configuração CORS, rotas)
+├── run.py                          # Script de inicialização simplificado
 ├── controllers/
 │   ├── __init__.py
-│   └── gasometria_controller.py    # Controller de gasometria
+│   └── gasometria_controller.py    # Controller: processa requisições HTTP
 ├── services/
 │   ├── __init__.py
-│   └── ocr_service.py              # Serviço de OCR
+│   └── ocr_service.py              # Service: ponte com módulo ocr-service
 ├── requirements.txt                # Dependências Python
-├── Dockerfile                      # Container Docker
-├── .env.example                    # Exemplo de configuração
+├── Dockerfile                      # Container Docker (Python 3.12 + Tesseract)
 └── README.md                       # Este arquivo
 ```
+
+## 🛠️ Stack
+
+- **Python 3.12** (não use 3.14+ - incompatibilidade com Gunicorn)
+- **Flask 3.0.0** - Framework web
+- **Flask-CORS 4.0.0** - CORS para APIs
+- **NumPy 1.26+** - Computação numérica
+- **OpenCV 4.8+** - Processamento de imagens
+- **pytesseract 0.3.10** - Wrapper Tesseract OCR
+- **Gunicorn 21.2.0** - Servidor WSGI de produção
+- **Tesseract OCR 5.0+** - Motor de OCR (idiomas: por, eng)
 
 ## 🚀 Quick Start
 
 ### Pré-requisitos
 
-- Python 3.11+
+**Para rodar com Docker:**
+- Docker Desktop 20.10+
+
+**Para rodar localmente:**
+- Python 3.12+
 - Tesseract OCR instalado ([Download Windows](https://github.com/UB-Mannheim/tesseract/wiki))
 - Idiomas: `por` (Português) e `eng` (Inglês)
+- Compiladores C/C++ (para instalar NumPy)
 
-### Instalação Local
+### Opção 1: Docker (Recomendado)
 
-1. **Clone o repositório** (se ainda não fez):
-   ```bash
-   git clone <repo-url>
-   cd poc-ocr-gasometria/python-api
+Da raiz do projeto:
+
+```bash
+docker-compose up --build
+```
+
+✅ API disponível em: `http://localhost:5000`
+
+### Opção 2: Execução Local
+
+1. **Configure Tesseract (Windows):**
+   
+   Edite `../ocr-service/main.py` e descomente as linhas 11-12:
+   ```python
+   pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+   os.environ['TESSDATA_PREFIX'] = r"C:\Program Files\Tesseract-OCR\tessdata"
    ```
 
-2. **Crie ambiente virtual**:
+2. **Instale dependências:**
    ```bash
-   python -m venv venv
-   
-   # Windows
-   venv\Scripts\activate
-   
-   # Linux/Mac
-   source venv/bin/activate
-   ```
-
-3. **Instale dependências**:
-   ```bash
+   cd backend-core
    pip install -r requirements.txt
    ```
 
-4. **Configure variáveis de ambiente**:
+3. **Execute:**
    ```bash
-   cp .env.example .env
-   # Edite .env com seus caminhos do Tesseract
+   python run.py
    ```
 
-5. **Execute a API**:
-   ```bash
-   python app.py
-   ```
-
-A API estará disponível em: `http://localhost:5000`
+✅ API disponível em: `http://localhost:5000`
 
 ## 📡 Endpoints
 
@@ -80,75 +92,10 @@ Health check simples.
 }
 ```
 
-#### `GET /api/health`
-Health check detalhado com status do Tesseract.
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "service": "OCR Gasometria",
-  "tesseract_version": "5.3.0",
-  "ocr_ready": true
-}
-```
-
-### Análise de Gasometria
-
-#### `POST /api/gasometria/analisar`
-Processa imagem de gasometria e extrai valores.
-
-**Request:**
-- Content-Type: `multipart/form-data`
-- Campo obrigatório: `imagem` (arquivo de imagem)
-- Parâmetros opcionais:
-  - `validar` (true/false) - Valida valores extraídos
-  - `debug` (true/false) - Inclui texto OCR bruto na resposta
-
-**Exemplo com cURL:**
-```bash
-curl -X POST http://localhost:5000/api/gasometria/analisar \
-  -F "imagem=@gasometria.png" \
-  -F "validar=true" \
-  -F "debug=false"
-```
-
-**Response (Sucesso):**
-```json
-{
-  "sucesso": true,
-  "valores": {
-    "pH": 7.35,
-    "pCO2": 45.0,
-    "pO2": 98.0,
-    "HCO3": 24.0,
-    "BE": -2.0,
-    "SaO2": 98.0,
-    "lactato": 1.2,
-    "Na": 140.0,
-    "K": 4.4,
-    "Ca": 1.2,
-    "Cl": 105.0,
-    "Glicose": 110.0
-  },
-  "validacao": {
-    "todas_validas": true,
-    "fora_faixa": []
-  }
-}
-```
-
-**Response (Erro):**
-```json
-{
-  "sucesso": false,
-  "erro": "Descrição do erro",
-  "detalhes": "Detalhes adicionais"
-}
-```
+### Listar Parâmetros
 
 #### `GET /api/gasometria/parametros`
-Lista todos os parâmetros disponíveis.
+Lista todos os parâmetros de gasometria que podem ser extraídos.
 
 **Response:**
 ```json
@@ -157,143 +104,158 @@ Lista todos os parâmetros disponíveis.
   "parametros": [
     {
       "nome": "pH",
-      "descricao": "Potencial hidrogeniônico",
+      "descricao": "Potencial hidrogenionico",
       "unidade": "",
       "faixa": "6.8 - 7.8"
     },
-    {
-      "nome": "pCO2",
-      "descricao": "Pressão parcial de CO2",
-      "unidade": "mmHg",
-      "faixa": "10 - 100"
-    }
-    // ... outros parâmetros
+    ...
   ]
 }
 ```
 
+### Obter Ranges de Validação
+
 #### `GET /api/gasometria/ranges`
-Retorna faixas de validação para cada parâmetro.
+Retorna os valores mínimos e máximos aceitos para cada parâmetro.
 
 **Response:**
 ```json
 {
   "sucesso": true,
   "ranges": {
-    "pH": { "min": 6.8, "max": 7.8 },
-    "pCO2": { "min": 10, "max": 100 },
-    "pO2": { "min": 40, "max": 500 }
-    // ... outros ranges
+    "pH": {"min": 6.8, "max": 7.8},
+    "pCO2": {"min": 10, "max": 100},
+    ...
   }
 }
 ```
 
-## 🐳 Docker
+### Análise de Gasometria
 
-### Build da Imagem
+#### `POST /api/gasometria/analisar`
+Processa imagem de gasometria e extrai valores.
 
-```bash
-docker build -t ocr-gasometria-api .
+**Query Parameters:**
+- `validar` (boolean, opcional, default: `false`) - Valida valores extraídos
+- `debug` (boolean, opcional, default: `false`) - Inclui texto OCR na resposta
+
+**Request:**
+```http
+POST /api/gasometria/analisar?validar=true&debug=false
+Content-Type: multipart/form-data
+
+imagem=<arquivo>
 ```
 
-### Executar Container
-
-```bash
-docker run -p 5000:5000 ocr-gasometria-api
+**Response (sucesso):**
+```json
+{
+  "sucesso": true,
+  "valores": {
+    "pH": 7.35,
+    "pCO2": 40,
+    "pO2": 95,
+    "HCO3": 24,
+    "BE": 0,
+    "SaO2": 98,
+    "lactato": 1.2,
+    "Na": 140,
+    "K": 4.0,
+    "Ca": 1.2,
+    "Cl": 105,
+    "Glicose": 90
+  },
+  "validacao": {
+    "pH": true,
+    "pCO2": true,
+    ...
+  }
+}
 ```
 
-## 🧪 Testes
+**Response (erro):**
+```json
+{
+  "sucesso": false,
+  "erro": "Nenhuma imagem foi enviada"
+}
+```
 
-### Teste Manual com cURL
+## 🧪 Exemplos de Uso
+
+### cURL (Bash)
 
 ```bash
 # Health check
 curl http://localhost:5000/health
 
-# Processar imagem
-curl -X POST http://localhost:5000/api/gasometria/analisar \
-  -F "imagem=@../ocr-service/gasometria.png"
-
 # Listar parâmetros
 curl http://localhost:5000/api/gasometria/parametros
+
+# Analisar imagem
+curl -X POST "http://localhost:5000/api/gasometria/analisar?validar=true" \
+  -F "imagem=@imagem.png"
 ```
 
-### Teste com Python
+### PowerShell
 
-```python
-import requests
+```powershell
+# Health check
+Invoke-WebRequest -Uri "http://localhost:5000/health" -UseBasicParsing
 
-# Enviar imagem
-url = "http://localhost:5000/api/gasometria/analisar"
-files = {"imagem": open("gasometria.png", "rb")}
-data = {"validar": "true", "debug": "false"}
-
-response = requests.post(url, files=files, data=data)
-print(response.json())
+# Analisar imagem
+$form = @{ imagem = Get-Item "imagem.png" }
+Invoke-WebRequest -Uri "http://localhost:5000/api/gasometria/analisar?validar=true" `
+    -Method Post -Form $form -UseBasicParsing
 ```
 
-## 🔧 Configuração Avançada
+## 🏗️ Arquitetura
 
-### Variáveis de Ambiente
+**Camadas:**
+1. **Controller** (`gasometria_controller.py`) - Processa requisições HTTP, valida input
+2. **Service** (`ocr_service.py`) - Lógica de negócio, importa módulo OCR
+3. **OCR Module** (`../ocr-service/main.py`) - Core: preprocessamento, OCR, extração
 
-| Variável | Descrição | Padrão |
-|----------|-----------|--------|
-| `FLASK_DEBUG` | Modo debug do Flask | `true` |
-| `HOST` | Host do servidor | `0.0.0.0` |
-| `PORT` | Porta do servidor | `5000` |
-| `TESSERACT_CMD` | Caminho do executável Tesseract | (detecta automaticamente) |
-| `TESSDATA_PREFIX` | Diretório de dados do Tesseract | (detecta automaticamente) |
-
-### Gunicorn (Produção)
-
-Para rodar em produção com Gunicorn:
-
-```bash
-gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 app:app
+**Fluxo:**
+```
+Cliente → Flask → Controller → Service → OCR Module → Tesseract
 ```
 
-## 📚 Arquitetura
+## 🔧 Desenvolvimento
 
-### Camadas
+### Estrutura de Arquivos
 
-1. **app.py**: Define rotas Flask e configuração da aplicação
-2. **Controllers**: Processam requisições HTTP e validam entrada
-3. **Services**: Implementam lógica de negócio e integração com OCR
-4. **OCR Core**: Módulo `main.py` do ocr-service (processamento de imagem)
+- **app.py** - Configuração do Flask, CORS, registro de rotas
+- **run.py** - Entry point simplificado
+- **controllers/** - Endpoints da API (lógica HTTP)
+- **services/** - Lógica de negócio e integração com OCR
 
-### Fluxo de Processamento
+### Adicionar Novo Endpoint
 
-```
-Cliente → Flask Route → Controller → Service → OCR Core
-                                              ↓
-Cliente ← JSON Response ← Controller ← Service ← Resultado
-```
+1. Crie método no controller (`controllers/gasometria_controller.py`)
+2. Registre rota no `app.py`
+3. Teste com curl ou Postman
 
-## 🛠️ Desenvolvimento
+### Modificar Lógica de OCR
 
-### Estrutura de Código
+Edite `../ocr-service/main.py` para ajustar:
+- Preprocessamento de imagem (`preprocessar_imagem`)
+- Regex de extração (`extrair_valores`)
+- Ranges de validação (`RANGES_GASOMETRIA`)
 
-- **app.py**: Aplicação principal Flask
-- **controllers/gasometria_controller.py**: Lógica de controle de requisições
-- **services/ocr_service.py**: Wrapper do módulo OCR com funcionalidades adicionais
+## 📚 Documentação Adicional
 
-### Adicionando Novos Endpoints
+- **[../README.md](../README.md)** - Guia de início rápido
+- **[../README-MONOREPO.md](../README-MONOREPO.md)** - Documentação técnica completa
+- **[../curl-examples.md](../curl-examples.md)** - Exemplos completos de uso da API
+- **[../COMO-TESTAR.md](../COMO-TESTAR.md)** - Guia de testes
 
-1. Adicione rota em `app.py`
-2. Implemente método no controller apropriado
-3. Se necessário, adicione lógica ao service
-4. Atualize documentação
+## 🐛 Troubleshooting
 
-## 📄 Licença
+Ver seção de Troubleshooting em [../README-MONOREPO.md](../README-MONOREPO.md#-troubleshooting)
 
-Projeto de POC para fins educacionais e de teste.
+## 📝 Notas
 
-## 🤝 Contribuindo
-
-Este é um projeto de demonstração. Para contribuições:
-
-1. Fork o projeto
-2. Crie uma branch para sua feature
-3. Commit suas mudanças
-4. Push para a branch
-5. Abra um Pull Request
+- Arquitetura monolítica para simplificar POC
+- `ocr-service` é módulo Python, não serviço HTTP separado
+- Tesseract deve estar no PATH ou configurado no `main.py`
