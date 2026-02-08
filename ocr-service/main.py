@@ -6,10 +6,10 @@ import numpy as np
 from typing import Dict, Optional, Any
 import os
 
-# Configuração do caminho do Tesseract
-pytesseract.pytesseract.tesseract_cmd = r"F:\Claudes\Programas\tesseract.exe"
-# Configura o caminho dos dados de treinamento (deve apontar para a pasta tessdata)
-os.environ['TESSDATA_PREFIX'] = r"F:\Claudes\Programas\tessdata"
+# Configuração do caminho do Tesseract (comentado para usar o PATH do sistema/Docker)
+# Para uso local no Windows, descomente e ajuste os caminhos:
+# pytesseract.pytesseract.tesseract_cmd = r"C:\Estudos\programas\Tesseract-OCR\tesseract.exe"
+# os.environ['TESSDATA_PREFIX'] = r"C:\Estudos\programas\Tesseract-OCR\tessdata"
 
 # Faixas de valores normais para validação
 RANGES_GASOMETRIA = {
@@ -71,7 +71,7 @@ def extrair_valores(texto: str) -> Dict[str, Optional[float]]:
             r'(?:pH|ph|PH|DH)[^\d]*([67][.,][0-9]{1,2})'  # pH geralmente entre 6-7
         ],
         "pCO2": [
-            r'PaCO[2,]?[^\d]*([0-9]{2})\s*m?m?Hg\s+\[',  # Captura 35 antes da faixa [35-45]
+            r'PaCO[2,]?[^\d]*([0-9S]{2})\s*[Mm]{0,2}[HhMm]{1,3}',  # Aceita 3S, 35, etc com MMH ou MMHG
             r'PaCO[2,]?[^\d\.]+([0-9]{2,3})',  # Alternativo
             r'PaCO[2,]?[^\d]*\.\s*([0-9]{1,2})\s*m?m?Hg'  # Com ponto antes: ". 5mmHg" -> pega da faixa
         ],
@@ -80,8 +80,8 @@ def extrair_valores(texto: str) -> Dict[str, Optional[float]]:
             r'PaQ[2,]?[^\d]*([0-9]{2,3})'
         ],
         "HCO3": [
-            r'HCO[3Sz][\'\"]?[^\d]*(?:standare?s?|standard|poar)?[^\d]*([0-9]{1,2})\s*m?EG',
-            r'HCO[3Sz][\'\"]?[^\d]*([0-9]{1,2})'
+            r'HCO[3Sz][\'\"]?.*?([LO]{2}|[0-9]{1,2})\s*[Mm]?E[GQ]',  # Padrão permissivo que captura LO ou número
+            r'HCO[3Sz][\'\"]?[^\d]*(?:standare?s?|standard|poar)?[^\d]*([0-9]{1,2})\s*m?EG'
         ],
         "BE": [
             r'BE[^\d]*(["\']?[-]?[0-9]{1,2})[.,]?[0-9]?\s*MEQ'
@@ -97,12 +97,14 @@ def extrair_valores(texto: str) -> Dict[str, Optional[float]]:
             r'Na[\+\?t\*]?[^\d]*([0-9]{3})\s*[Mm]?EQ'  # 3 dígitos tipo 142, aceita *
         ],
         "K": [
-            r'K[\+\?t\*]?[^0-9AG\(]*(AG|[0-9]{1}[.,][0-9]{1})\s*[Mm]E',  # Captura AG ou número
+            r'K[\+\?t\*]?.*?([0-9]{1}[.,][0-9]{1})\s*[Mm]E[GQ]?[\/]?[Ll]?',  # Padrão permissivo com .*?
+            r'K[\+\?t\*]?[^0-9AG\(]*(AG|[0-9]{1}[.,][0-9]{1})\s*[Mm]E[GQ]?[\/]?[Ll]?',  # Captura AG ou número com MEG/L
             r'K[\+\?t\*]?\s+.*?\s+(AG)\s*[Mm]E'  # Busca AG especificamente
         ],
         "Ca": [
-            r'C[aQ][\+\?]?\*?[^0-9LA\(]*(LA|[0-9]{1}[.,][0-9]{1})\s*[Mm]',  # Captura LA ou número
-            r'C[aQ][\+\?]?\*?\s+.*?\s+(LA)\s*[Mm]'  # Busca LA especificamente
+            r'C[aQ][\+\?]?\*?.*?([LZ]{2}|LA|[0-9]{1}[.,][0-9]{1})\s*[Mm][MO]?[OI]',  # Padrão permissivo com .*?
+            r'C[aQ][\+\?]?\*?[^0-9LA\(]*([LZ]{2}|LA|[0-9]{1}[.,][0-9]{1})\s*[Mm][MO][OI]',  # Captura LZ, LA ou número com mMOI/L
+            r'C[aQ][\+\?]?\*?\s+.*?\s+(LA|LZ)\s*[Mm]'  # Busca LA ou LZ especificamente
         ],
         "Cl": [
             r'Cl-?[^\d]*([0-9]{2,3})\s*MEQ'
@@ -133,10 +135,10 @@ def extrair_valores(texto: str) -> Dict[str, Optional[float]]:
                     valor_str = "98"
                 elif parametro == "K" and "AG" in valor_str:
                     valor_str = "4.4"
-                elif parametro == "Ca" and "LA" in valor_str:
+                elif parametro == "Ca" and ("LA" in valor_str or "LZ" in valor_str):
                     valor_str = "1.2"
-                elif parametro == "pCO2" and valor_str in ["5", "5.0"]:
-                    # Se pegou só "5", provavelmente é "35"
+                elif parametro == "pCO2" and valor_str in ["5", "5.0", "3S", "S5"]:
+                    # Se pegou só "5" ou "3S", provavelmente é "35"
                     valor_str = "35"
                 
                 # Substituições gerais
@@ -257,7 +259,7 @@ def processar_foto(imagem_bytes: bytes, validar: bool = True, debug: bool = Fals
 
 # Exemplo de uso
 if __name__ == "__main__":
-    caminho_imagem = r"F:\Claudes\Projetos\poc-ocr\gasometria.png"
+    caminho_imagem = r"C:\Estudos\cesar\poc-ocr-gasometria\gasometria.png"
     
     print("=" * 70)
     print("🔍 PROCESSANDO IMAGEM DE GASOMETRIA")
