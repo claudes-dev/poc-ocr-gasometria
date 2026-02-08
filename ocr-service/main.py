@@ -6,10 +6,10 @@ import numpy as np
 from typing import Dict, Optional, Any
 import os
 
-# Configuração do caminho do Tesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Estudos\programas\Tesseract-OCR\tesseract.exe"
-# Configura o caminho dos dados de treinamento (deve apontar para a pasta tessdata)
-os.environ['TESSDATA_PREFIX'] = r"C:\Estudos\programas\Tesseract-OCR\tessdata"
+# Configuração do caminho do Tesseract (comentado para usar o PATH do sistema/Docker)
+# Para uso local no Windows, descomente e ajuste os caminhos:
+# pytesseract.pytesseract.tesseract_cmd = r"C:\Estudos\programas\Tesseract-OCR\tesseract.exe"
+# os.environ['TESSDATA_PREFIX'] = r"C:\Estudos\programas\Tesseract-OCR\tessdata"
 
 # Faixas de valores normais para validação
 RANGES_GASOMETRIA = {
