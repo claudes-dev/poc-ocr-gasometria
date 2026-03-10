@@ -6,6 +6,14 @@ from flask import jsonify
 from services.ocr_service import OcrService
 import traceback
 import json
+import uuid
+
+# Unidades por parâmetro
+_UNITS = {
+    "pH": "", "pCO2": "mmHg", "pO2": "mmHg", "HCO3": "mEq/L",
+    "BE": "mEq/L", "SaO2": "%", "lactato": "mmol/L",
+    "Na": "mEq/L", "K": "mEq/L", "Ca": "mmol/L", "Cl": "mEq/L", "Glicose": "mg/dL"
+}
 
 class GasometriaController:
     """Controller responsável por gerenciar requisições de gasometria."""
@@ -30,6 +38,52 @@ class GasometriaController:
                 "erro": str(e)
             }), 503
     
+    def _transform_result(self, resultado_dict, species):
+        """Transforma resultado OCR interno no formato padronizado da API."""
+        exam_id = str(uuid.uuid4())
+        species = species or "unknown"
+
+        if not resultado_dict.get("sucesso"):
+            return {
+                "examId": exam_id,
+                "species": species,
+                "status": "OCR_ERROR",
+                "error": resultado_dict.get("erro", "Erro desconhecido")
+            }, 400
+
+        dados = resultado_dict.get("dados", {})
+        extracted = []
+
+        for param, info in dados.items():
+            if isinstance(info, dict):
+                valor = info.get("valor")
+                valido = info.get("valido")
+            else:
+                valor = info
+                valido = None
+
+            if valor is None:
+                continue
+
+            confidence = 0.90 if valido is True else (0.65 if valido is False else 0.75)
+
+            extracted.append({
+                "code": param.lower(),
+                "valueRaw": str(valor),
+                "valueNumber": valor,
+                "unit": _UNITS.get(param, ""),
+                "confidence": confidence
+            })
+
+        return {
+            "examId": exam_id,
+            "species": species,
+            "status": "OCR_DONE",
+            "parametros_encontrados": len(extracted),
+            "total_parametros": len(dados),
+            "extracted": extracted
+        }, 200
+
     def analisar_imagem(self, request):
         """
         Analisa uma imagem de gasometria enviada via POST.
@@ -44,8 +98,9 @@ class GasometriaController:
             # Valida presença do arquivo
             if 'imagem' not in request.files:
                 return jsonify({
-                    "sucesso": False,
-                    "erro": "Nenhuma imagem enviada. Use o campo 'imagem'."
+                    "examId": str(uuid.uuid4()),
+                    "status": "OCR_ERROR",
+                    "error": "Nenhuma imagem enviada. Use o campo 'imagem'."
                 }), 400
             
             arquivo = request.files['imagem']
@@ -53,8 +108,9 @@ class GasometriaController:
             # Valida nome do arquivo
             if arquivo.filename == '':
                 return jsonify({
-                    "sucesso": False,
-                    "erro": "Nome de arquivo vazio."
+                    "examId": str(uuid.uuid4()),
+                    "status": "OCR_ERROR",
+                    "error": "Nome de arquivo vazio."
                 }), 400
             
             # Log da requisição
@@ -64,13 +120,13 @@ class GasometriaController:
             imagem_bytes = arquivo.read()
             
             # Obtém parâmetros opcionais
-            validar = request.form.get('validar', 'true').lower() == 'true'
+            species = request.form.get('species') or request.args.get('species', 'unknown')
             debug = request.form.get('debug', 'false').lower() == 'true'
             
-            # Processa imagem através do serviço
+            # Processa sempre com validar=True para calcular confidence
             resultado = self.ocr_service.processar_imagem(
-                imagem_bytes, 
-                validar=validar, 
+                imagem_bytes,
+                validar=True,
                 debug=debug
             )
             
@@ -79,23 +135,31 @@ class GasometriaController:
             
             # Log do resultado
             if resultado_dict.get("sucesso"):
-                print(f"✅ Processamento concluído com sucesso")
-                if "valores" in resultado_dict:
-                    print(f"📊 Parâmetros extraídos: {len(resultado_dict['valores'])}")
+                dados = resultado_dict.get("dados", {})
+                encontrados = sum(1 for v in dados.values()
+                                  if (isinstance(v, dict) and v.get("valor") is not None)
+                                  or (not isinstance(v, dict) and v is not None))
+                print(f"✅ Processamento concluído — {encontrados} parâmetros extraídos")
             else:
                 print(f"❌ Erro no processamento: {resultado_dict.get('erro', 'Desconhecido')}")
-            
-            # Retorna resultado
-            status_code = 200 if resultado_dict.get("sucesso") else 400
-            return jsonify(resultado_dict), status_code
+
+            if debug:
+                resultado_dict["texto_ocr"] = resultado_dict.get("texto_ocr")
+
+            resposta, status_code = self._transform_result(resultado_dict, species)
+
+            if debug and "texto_ocr" in resultado_dict:
+                resposta["texto_ocr"] = resultado_dict["texto_ocr"]
+
+            return jsonify(resposta), status_code
             
         except Exception as e:
             print(f"❌ Erro ao processar imagem: {e}")
             traceback.print_exc()
             return jsonify({
-                "sucesso": False,
-                "erro": "Erro interno ao processar imagem",
-                "detalhes": str(e)
+                "examId": str(uuid.uuid4()),
+                "status": "OCR_ERROR",
+                "error": "Erro interno ao processar imagem"
             }), 500
     
     def listar_parametros(self):
